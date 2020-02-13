@@ -1,0 +1,464 @@
+---
+title: "Final Analyses"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Creating the Dataset: 
+
+```{r}
+setwd("~/Desktop/Thesis")
+
+library(ggplot2)
+library(car)
+library(lme4)
+library(lmerTest)
+library(plotrix)
+library(Rmisc)
+library(dplyr)
+library(MASS)
+library(MuMIn)
+library(ggthemes)
+```
+
+### Calculations for additional metrics:
+
+```{r}
+thesis.data <- read.table("thesis_data_June10.csv", header = T, sep = ",")
+
+thesis.data$survival <- (thesis.data$count.after / thesis.data$count.before)
+thesis.data$midden <- as.factor(thesis.data$midden)
+thesis.data$lw.ratio <- thesis.data$length / thesis.data$width 
+thesis.data$relative.fitness <- thesis.data$survival / mean(thesis.data$survival) 
+thesis.data$mass.indiv.seed <- thesis.data$mass.seed / thesis.data$count.seeds
+thesis.data$mass.ratio <- thesis.data$mass.seed / thesis.data$mass.cone
+thesis.data$wl.ratio <- thesis.data$width / thesis.data$length
+
+thesis.data <- thesis.data[thesis.data$id != "2.12.15", ]
+
+head(thesis.data)
+```
+
+### Standardizing the cone traits:
+
+```{r}
+z.thesis.data <- thesis.data
+
+z.thesis.data$length <- scale(z.thesis.data$length, center = TRUE, scale = TRUE)
+z.thesis.data$width <- scale(z.thesis.data$width, center = TRUE, scale = TRUE)
+z.thesis.data$width.scale <- scale(z.thesis.data$width.scale, center = TRUE, scale = TRUE)
+z.thesis.data$count.seeds <- scale(z.thesis.data$count.seeds, center = TRUE, scale = TRUE)
+z.thesis.data$mass.ratio <- scale(z.thesis.data$mass.ratio, center = TRUE, scale = TRUE)
+z.thesis.data$lw.ratio <- scale(z.thesis.data$lw.ratio, center = TRUE, scale = TRUE)
+z.thesis.data$mass.indiv.seed <- scale(z.thesis.data$mass.indiv.seed, center = TRUE, scale = TRUE)
+z.thesis.data$wl.ratio <- scale(z.thesis.data$wl.ratio, center = TRUE, scale = TRUE)
+
+head(z.thesis.data)
+```
+
+### Splitting into NS and S Cohorts:
+
+```{r}
+z.thesis.data.NS <- z.thesis.data[z.thesis.data$serotiny == "NS",]
+z.thesis.data.S <- z.thesis.data[z.thesis.data$serotiny == "S",]
+```
+
+
+## Table of values:
+  - means of each trait (for serotinous and non-serotinous)
+  - SEs
+  - ranges
+
+### Means:  
+```{r}
+thesis.subset <- subset(thesis.data, select = c(distance, serotiny, cones.sampled, length, width, width.scale, count.seeds, mass.cone, mass.seed, mass.ratio, count.before, count.after, survival, lw.ratio))
+
+#Had to figure out a way to not get undefined for the ones with no seeds
+
+thesis.subset$mass.indiv.seed <- thesis.subset$mass.seed / (thesis.subset$count.seeds + .000001)
+
+#avg.mean <- aggregate(thesis.subset, list(serotiny = thesis.subset$serotiny), FUN = mean)
+```
+
+### Individual SE calculations per trait:  
+```{r}
+SE.distance <- summarySE(thesis.subset, measurevar = "distance", groupvars = "serotiny")
+SE.cones.sampled <- summarySE(thesis.subset, measurevar = "cones.sampled", groupvars = "serotiny")
+SE.length <- summarySE(thesis.subset, measurevar = "length", groupvars = "serotiny")
+SE.width<- summarySE(thesis.subset, measurevar = "width", groupvars = "serotiny")
+SE.width.scale <- summarySE(thesis.subset, measurevar = "width.scale", groupvars = "serotiny")
+SE.count.seeds <- summarySE(thesis.subset, measurevar = "count.seeds", groupvars = "serotiny")
+SE.mass.cone <- summarySE(thesis.subset, measurevar = "mass.cone", groupvars = "serotiny")
+SE.mass.indiv.seed <- summarySE(thesis.subset, measurevar = "mass.indiv.seed", groupvars = "serotiny")
+SE.mass.ratio <- summarySE(thesis.subset, measurevar = "mass.ratio", groupvars = "serotiny")
+SE.count.before <- summarySE(thesis.subset, measurevar = "count.before", groupvars = "serotiny")
+SE.count.after <- summarySE(thesis.subset, measurevar = "count.after", groupvars = "serotiny")
+SE.survival <- summarySE(thesis.subset, measurevar = "survival", groupvars = "serotiny")
+SE.lw.ratio <- summarySE(thesis.subset, measurevar = "lw.ratio", groupvars = "serotiny")
+
+```
+
+### T-tests for trait data:
+```{r}
+thesis.subset.NS <- thesis.subset[thesis.data$serotiny == "NS",]
+thesis.subset.S <- thesis.subset[thesis.data$serotiny == "S",]
+```
+
+```{r}
+t.test(thesis.subset.NS$distance, thesis.subset.S$distance)
+t.test(thesis.subset.NS$cones.sampled, thesis.subset.S$cones.sampled)
+t.test(thesis.subset.NS$length, thesis.subset.S$length)
+t.test(thesis.subset.NS$width, thesis.subset.S$width)
+t.test(thesis.subset.NS$width.scale, thesis.subset.S$width.scale)
+t.test(thesis.subset.NS$count.seeds, thesis.subset.S$count.seeds)
+t.test(thesis.subset.NS$mass.cone, thesis.subset.S$mass.cone)
+t.test(thesis.subset.NS$mass.indiv.seed, thesis.subset.S$mass.indiv.seed)
+t.test(thesis.subset.NS$mass.ratio, thesis.subset.S$mass.ratio)
+t.test(thesis.subset.NS$count.before, thesis.subset.S$count.before)
+t.test(thesis.subset.NS$count.after, thesis.subset.S$count.after)
+t.test(thesis.subset.NS$lw.ratio, thesis.subset.S$lw.ratio)
+```
+
+
+### T-test for survival
+```{r}
+t.test(z.thesis.data.NS$survival, z.thesis.data.S$survival)
+```
+
+## Selection Gradients: 
+
+### 3 cone traits of interest
+```{r}
+additive <- glm(relative.fitness ~ lw.ratio + mass.ratio + serotiny + width.scale, data = z.thesis.data)
+
+summary(additive)
+
+```
+
+### Cone traits of interest and potential confounding variables
+
+**Utilized gradient analysis** 
+```{r}
+alltraits <- glm(relative.fitness ~ lw.ratio + mass.ratio + serotiny + width.scale + jdate.cone + dbh + distance + direction + midden.S, data = z.thesis.data)
+
+summary(alltraits)
+```
+
+### Double-checking Midden Serotiny level 
+
+```{r}
+checkingmiddenS <- glm(relative.fitness ~ lw.ratio + mass.ratio + width.scale + serotiny + midden.S, data = z.thesis.data)
+
+summary(checkingmiddenS)
+```
+
+Nope, not significant!! 
+
+### Checking for interactions: 
+
+```{r}
+checkingmiddenSint <- glm(relative.fitness ~ mass.ratio*serotiny*midden.S, data = z.thesis.data)
+
+summary(checkingmiddenSint)
+```
+
+### Interactions with traits of interest:
+```{r}
+allinteractions <- glm(relative.fitness ~ mass.ratio*serotiny*lw.ratio*width.scale, data = z.thesis.data)
+summary(allinteractions)
+```
+
+### Significant terms from that model:
+```{r}
+sigfromall <- glm(relative.fitness ~ mass.ratio + serotiny + mass.ratio:serotiny:lw.ratio, data = z.thesis.data)
+
+summary(sigfromall)
+```
+
+### Simple interactive:
+```{r}
+simpleinteractive <- glm(relative.fitness ~ mass.ratio*serotiny, data = z.thesis.data)
+
+summary(simpleinteractive)
+```
+
+### Simple additive:
+```{r}
+simpleadditive <- glm(relative.fitness ~ mass.ratio + serotiny, data = z.thesis.data)
+
+summary(simpleadditive)
+
+```
+
+
+### AICc Calculations
+```{r}
+AICvals <- AIC(additive, alltraits, checkingmiddenS, checkingmiddenSint, allinteractions, sigfromall, simpleinteractive, simpleadditive)
+AICvals$corrected <- c(AICc(additive), AICc(alltraits), AICc(checkingmiddenS), AICc(checkingmiddenSint), AICc(allinteractions), AICc(sigfromall), AICc(simpleinteractive), AICc(simpleadditive))
+AICvals$deltacorr <- AICvals$corrected - min(AICvals$corrected)
+
+AICvals
+```
+
+## VIF Calculations:
+```{r}
+#In Table Order:
+vif(alltraits) #NO
+vif(allinteractions) #YES - interactions, duh 
+vif(additive) #NO
+vif(simpleinteractive) #YES - interaction again
+vif(simpleadditive) #NO
+
+
+vif(glm(relative.fitness ~ length + width + mass.cone + mass.seed + serotiny + width.scale + jdate.cone + dbh + distance + direction + midden.S, data = z.thesis.data)) #YES
+vif(glm(relative.fitness ~ length + width + mass.cone + width.scale, data = z.thesis.data)) #YES
+vif(glm(relative.fitness ~ length + width, data = z.thesis.data)) #YES
+vif(glm(relative.fitness ~ length + mass.cone, data = z.thesis.data)) #NO
+vif(glm(relative.fitness ~ length + width.scale, data = z.thesis.data)) #NO
+vif(glm(relative.fitness ~ width + mass.cone, data = z.thesis.data)) #YES
+vif(glm(relative.fitness ~ width + width.scale, data = z.thesis.data)) #YES (barely)
+vif(glm(relative.fitness ~ mass.cone + width.scale, data = z.thesis.data)) #NO
+
+vif(glm(relative.fitness ~ lw.ratio + width.scale, data = z.thesis.data)) #NO
+vif(glm(relative.fitness ~ lw.ratio + mass.cone, data = z.thesis.data)) #NO
+
+```
+
+## Selection Differentials:
+
+### Length to Width Ratio
+```{r}
+lwmodNS <- glm(relative.fitness ~ lw.ratio, data = z.thesis.data.NS)
+
+summary(lwmodNS)
+```
+
+```{r}
+lwmodS <- glm(relative.fitness ~ lw.ratio, data = z.thesis.data.S)
+
+summary(lwmodS)
+```
+
+### Cone to Seed Mass Ratio
+```{r}
+massmodNS <- glm(relative.fitness ~ mass.ratio, data = z.thesis.data.NS)
+
+summary(massmodNS)
+```
+
+```{r}
+massmodS <- glm(relative.fitness ~ mass.ratio, data = z.thesis.data.S)
+
+summary(massmodS)
+```
+
+### Scale Width
+```{r}
+widthmodNS <- glm(relative.fitness ~ width.scale, data = z.thesis.data.NS)
+
+summary(widthmodNS)
+```
+
+```{r}
+widthmodS <- glm(relative.fitness ~ width.scale, data = z.thesis.data.S)
+
+summary(widthmodS)
+```
+
+### Number of Full Seeds
+
+```{r}
+numseedNS <- glm(relative.fitness ~ count.seeds, data = z.thesis.data.NS)
+
+summary(numseedNS)
+```
+
+```{r}
+numseedS <- glm(relative.fitness ~ count.seeds, data = z.thesis.data.S)
+
+summary(numseedS)
+```
+
+### Individual Seed Mass:
+
+```{r}
+seedmassNS <- glm(relative.fitness ~ mass.indiv.seed, data = z.thesis.data.NS)
+
+summary(seedmassNS)
+```
+
+```{r}
+seedmassS <- glm(relative.fitness ~ mass.indiv.seed, data = z.thesis.data.S)
+
+summary(seedmassS)
+```
+
+### Cone Length
+
+```{r}
+conelengthNS <- glm(relative.fitness ~ length, data = z.thesis.data.NS)
+
+summary(conelengthNS)
+```
+
+```{r}
+conelengthS <- glm(relative.fitness ~ length, data = z.thesis.data.S)
+
+summary(conelengthS)
+```
+
+### Cone Width
+
+```{r}
+conewidthNS <- glm(relative.fitness ~ width, data = z.thesis.data.NS)
+
+summary(conewidthNS)
+```
+
+```{r}
+conewidthS <- glm(relative.fitness ~ width, data = z.thesis.data.S)
+
+summary(conewidthS)
+```
+
+### Cone Mass
+
+```{r}
+conemassNS <- glm(relative.fitness ~ mass.cone, data = z.thesis.data.NS)
+
+summary(conemassNS)
+```
+
+```{r}
+conemassS <- glm(relative.fitness ~ mass.cone, data = z.thesis.data.S)
+
+summary(conemassS)
+```
+
+### Midden Serotiny
+
+```{r}
+middenNS <- glm(relative.fitness ~ midden.S, data = z.thesis.data.NS)
+
+summary(middenNS)
+```
+
+```{r}
+middenS <- glm(relative.fitness ~ midden.S, data = z.thesis.data.S)
+
+summary(middenS)
+```
+
+```{r}
+midden <- glm(relative.fitness ~ midden.S, data = z.thesis.data)
+
+summary(midden)
+```
+
+## Graphs
+
+### Graph of Relative Fitness vs. Serotiny 
+```{r}
+ggplot(z.thesis.data, aes(x=serotiny, y=survival)) + 
+  geom_boxplot(aes()) +
+  labs(x = "", y = "Cone Survival Rate") + 
+  theme_bw() + 
+  theme(axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)) + 
+  theme(axis.text.x = element_text(size = 14),
+        axis.text.y = element_text(size = 12)) +
+  scale_x_discrete(labels = c("Non-serotinous trees", "Serotinous trees"))
+
+ggsave("serotiny.boxplot.14Dec.png", width = 8, height = 5)
+```
+
+### Graph of Relative Fitness vs. Kernel to Cone Mass Ratio
+
+```{r}
+ggplot(z.thesis.data, aes(x=mass.ratio, y=relative.fitness, shape = serotiny)) +
+  theme_bw() + 
+  geom_point(aes(), size = 2) +
+  scale_shape_manual(values = c(1,19), 
+                     labels = c("Non-serotinous", "Serotinous")) + 
+  theme(legend.position = c(.85,.9)) + 
+  geom_smooth(method = "lm", aes(linetype = serotiny), color = "black") +
+  scale_linetype_manual(values = c("dashed", "solid"),
+                        labels = c("Non-serotinous", "Serotinous")) +
+  theme(legend.position = c(.85, .9)) + 
+  theme(legend.text = element_text(size = 12)) + 
+  theme(axis.line.x = element_line(color="black"),
+        axis.line.y = element_line(color="black")) + 
+  theme(axis.title.x = element_text(size = 16),
+        axis.title.y = element_text(size = 16)) + 
+  theme(axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12)) + 
+  labs(x = "Standardized Kernel to Cone Mass Ratio", y = "Relative Fitness") + 
+  theme(legend.title = element_blank()) 
+  
+  ggsave("serotiny.massratio.14Dec.png", width = 8, height = 5)
+```
+
+### Graph of Relative Fitness vs. Individual Kernel Mass
+
+```{r}
+ggplot(z.thesis.data, aes(x=mass.indiv.seed, y=relative.fitness, shape = serotiny)) +
+  theme_bw() + 
+  geom_point(aes(), size = 2) +
+  scale_shape_manual(values = c(1,19), 
+                     labels = c("Non-serotinous", "Serotinous")) + 
+  theme(legend.position = c(.85,.9)) + 
+  geom_smooth(method = "lm", aes(linetype = serotiny), color = "black") +
+  scale_linetype_manual(values = c("dashed", "solid"),
+                        labels = c("Non-serotinous", "Serotinous")) +
+  theme(legend.position = c(.85, .9)) + 
+  theme(legend.text = element_text(size = 12)) + 
+  theme(axis.line.x = element_line(color="black"),
+        axis.line.y = element_line(color="black")) + 
+  theme(axis.title.x = element_text(size = 16),
+        axis.title.y = element_text(size = 16)) + 
+  theme(axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12)) + 
+  labs(x = "Standardized Individual Kernel Mass", y = "Relative Fitness") + 
+  theme(legend.title = element_blank()) 
+  
+  ggsave("serotiny.kernelmass.15Dec.png", width = 8, height = 5)
+```
+
+### With that outlier removed: 
+
+```{r}
+ind.thesis.data <- z.thesis.data[z.thesis.data$id != "2.04.17", ]
+
+ggplot(ind.thesis.data, aes(x=mass.indiv.seed, y=relative.fitness)) + 
+  geom_point(aes(color = serotiny)) +
+  geom_smooth(method = "lm", aes(color = serotiny)) +
+  labs(x = "Individual Seed Mass", y = "Relative Fitness")
+```
+
+### Graph of Relative Fitness vs. Number of Kernels 
+
+```{r}
+ggplot(z.thesis.data, aes(x=count.seeds, y=relative.fitness, shape = serotiny)) +
+  theme_bw() + 
+  geom_point(aes(), size = 2) +
+  scale_shape_manual(values = c(1,19), 
+                     labels = c("Non-serotinous", "Serotinous")) + 
+  theme(legend.position = c(.85,.9)) + 
+  geom_smooth(method = "lm", aes(linetype = serotiny), color = "black") +
+  scale_linetype_manual(values = c("dashed", "solid"),
+                        labels = c("Non-serotinous", "Serotinous")) +
+  theme(legend.position = c(.85, .9)) + 
+  theme(legend.text = element_text(size = 12)) + 
+  theme(axis.line.x = element_line(color="black"),
+        axis.line.y = element_line(color="black")) + 
+  theme(axis.title.x = element_text(size = 16),
+        axis.title.y = element_text(size = 16)) + 
+  theme(axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12)) + 
+  labs(x = "Standardized Number of Kernels per Cone", y = "Relative Fitness") + 
+  theme(legend.title = element_blank()) 
+  
+  ggsave("serotiny.kernelcount.15Dec.png", width = 8, height = 5)
+```
+
