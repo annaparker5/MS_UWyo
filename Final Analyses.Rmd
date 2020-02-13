@@ -1,15 +1,13 @@
 ---
 title: "Final Analyses"
 output:
-  html_document:
-    df_print: paged
+  html_document: 
+    keep_md: yes
 ---
 
 ## Creating the Dataset: 
 
 ```{r}
-setwd("~/Desktop/Thesis")
-
 library(ggplot2)
 library(car)
 library(lme4)
